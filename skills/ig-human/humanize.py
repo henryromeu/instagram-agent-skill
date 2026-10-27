@@ -24,6 +24,7 @@ Usage
   pbpaste | python3 humanize.py - --report
   python3 humanize.py draft.txt --json
   python3 humanize.py draft.txt -o clean.txt
+  python3 humanize.py rascunho.txt --lang pt   # slop.pt.json; auto by default
 """
 
 import argparse
@@ -35,14 +36,50 @@ import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LEX = os.path.join(HERE, "slop.json")
+LEX_PT = os.path.join(HERE, "slop.pt.json")
 
 URL_RE = re.compile(r"https?://\S+|www\.\S+|\S+@\S+\.\S+")
 SENT_RE = re.compile(r"[^.!?\n]+[.!?]*")
 
+PT_MARKERS = {
+    "você", "voce", "vc", "não", "nao", "que", "pra", "para", "com", "uma",
+    "isso", "esse", "essa", "meu", "minha", "eu", "tá", "é", "seu", "sua",
+    "mais", "como", "por", "dos", "das", "nunca", "ninguém", "quem", "foi",
+    "o", "e", "os", "um", "de", "do", "da", "em", "no", "na", "me", "te", "se",
+    "mas", "hoje", "agora", "aqui", "muito", "tem", "vai", "vou", "faz", "ele",
+    "ela", "porque", "quando", "sempre", "depois", "ainda", "leva", "fiz",
+}
+EN_MARKERS = {
+    "the", "and", "you", "your", "that", "this", "with", "for", "is", "are",
+    "was", "my", "i", "it", "of", "to", "what", "how", "nobody", "never",
+}
+
+
+def guess_lang(text):
+    """Accents settle it. Otherwise count function words from each side."""
+    low = text.lower()
+    if re.search(r"[ãõçâêôáéíóú]", low):
+        return "pt"
+    w = set(re.findall(r"[a-zà-ÿ']+", low))
+    return "pt" if len(w & PT_MARKERS) > len(w & EN_MARKERS) else "en"
+
+
+def lexicon_path(lang, text):
+    if lang == "auto":
+        lang = guess_lang(text)
+    return LEX_PT if lang == "pt" else LEX
+
 
 def load_lexicon(path=LEX):
     with open(path, encoding="utf-8") as fh:
-        return json.load(fh)
+        lex = json.load(fh)
+    # A language file only carries its own words; invisible characters and
+    # typography are the same in every language, so they come from the base.
+    if lex.get("extends"):
+        base = load_lexicon(os.path.join(os.path.dirname(path), lex["extends"]))
+        for key in ("invisible", "typographic"):
+            lex.setdefault(key, base[key])
+    return lex
 
 
 def _cp(spec):
@@ -154,6 +191,9 @@ def pass_lexical(text, lex):
     text = text.replace("...", "\x00ELL\x00")          # protect real ellipses
     text = re.sub(r"\.\s*\.+", ".", text)
     text = re.sub(r"([!?])\s*\.", r"\1", text)
+    text = re.sub(r"([.!?])[ \t]*,[ \t]*", r"\1 ", text)  # a deleted opener left
+                                                      # "potential., consistency"
+    text = re.sub(r"\b([Mm]as),\s+", r"\1 ", text)     # "Contudo, eu" became "Mas, eu"
     text = text.replace("\x00ELL\x00", "...")
     text = re.sub(r"(?m)^[ \t]+$", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -196,10 +236,10 @@ def restore_capitals(original, text):
     a deliberately lower-case voice is a style, not an artefact, and shouting
     over it would be exactly the kind of thing this script exists to stop.
     """
-    starts = re.findall(r"(?:^|[.!?]\s+|\n)\s*([A-Za-z])", original)
+    starts = re.findall(r"(?:^|[.!?]\s+|\n)\s*([A-Za-zÀ-ÿ])", original)
     if not starts or sum(1 for c in starts if c.isupper()) * 2 < len(starts):
         return text
-    return re.sub(r"(?:^|(?<=[.!?] )|(?<=[.!?]\n)|(?<=\n))\s*([a-z])",
+    return re.sub(r"(?:^|(?<=[.!?] )|(?<=[.!?]\n)|(?<=\n))\s*([a-zà-ÿ])",
                   lambda m: m.group(0)[:-1] + m.group(1).upper(), text)
 
 
@@ -259,11 +299,16 @@ def main():
     ap.add_argument("-o", "--out", help="write cleaned text here instead of stdout")
     ap.add_argument("--report", action="store_true", help="print what changed, to stderr")
     ap.add_argument("--json", action="store_true", help="emit {text, report} as JSON")
-    ap.add_argument("--lexicon", default=LEX, help="path to slop.json")
+    ap.add_argument("--lexicon", help="path to a lexicon (overrides --lang)")
+    ap.add_argument("--lang", choices=["auto", "en", "pt"], default="auto",
+                    help="slop.json or slop.pt.json (default: guess from the draft)")
     args = ap.parse_args()
+    for stream in (sys.stdin, sys.stdout, sys.stderr):   # Windows defaults to cp1252
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
 
     raw = sys.stdin.read() if args.input == "-" else open(args.input, encoding="utf-8").read()
-    lex = load_lexicon(args.lexicon)
+    lex = load_lexicon(args.lexicon or lexicon_path(args.lang, raw))
     clean, report = humanize(raw, lex)
 
     if args.json:

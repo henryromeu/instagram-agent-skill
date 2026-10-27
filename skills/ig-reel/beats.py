@@ -26,15 +26,21 @@ import json
 import re
 import sys
 
-WORD_RE = re.compile(r"[A-Za-z0-9$%'’-]+")
+WORD_RE = re.compile(r"[\w$%'’-]+")              # \w: "ninguém" is one word
 SENT_RE = re.compile(r"[^.!?]+[.!?]*")
-CONCRETE_RE = re.compile(r"\$\s?\d|\b\d[\d,.]*\b|(?<!^)\b[A-Z][a-z]{2,}\b", re.MULTILINE)
+CONCRETE_RE = re.compile(r"\$\s?\d|\b\d[\d,.]*\b|(?<!^)\b[A-ZÀ-Ý][a-zà-ÿ]{2,}\b", re.MULTILINE)
 STOPWORDS = {
     "the", "a", "an", "and", "or", "but", "if", "of", "to", "in", "on", "for",
     "with", "that", "this", "it", "is", "are", "was", "were", "be", "been",
     "you", "your", "i", "my", "me", "we", "our", "they", "them", "he", "she",
     "so", "just", "not", "no", "do", "did", "does", "have", "has", "had",
     "will", "can", "at", "as", "by", "from", "out", "up", "off", "one", "all",
+    # Portuguese, so the loop check does not count "que" as an echo.
+    "o", "os", "as", "um", "uma", "e", "ou", "mas", "se", "de", "do", "da",
+    "dos", "das", "em", "no", "na", "nos", "nas", "pra", "para", "por", "com",
+    "que", "isso", "esse", "essa", "é", "foi", "tá", "eu", "meu", "minha",
+    "você", "vc", "seu", "sua", "me", "te", "gente", "não", "nao", "só",
+    "já", "mais", "muito", "tudo", "todo", "ele", "ela", "eles", "elas",
 }
 
 HOOK_WINDOW = 3.0        # seconds. Past this, the thumb has already decided.
@@ -44,7 +50,8 @@ ABSTRACT_RUN = 3         # beats in a row with nothing checkable in them.
 
 def words(text):
     # "$18,000" is one word when it is spoken, so it is one word here too.
-    return WORD_RE.findall(re.sub(r"(?<=\d),(?=\d)", "", text))
+    # So is "R$ 18.000": Portuguese groups thousands with a dot.
+    return WORD_RE.findall(re.sub(r"(?<=\d),(?=\d)|(?<=\d)\.(?=\d{3}\b)", "", text))
 
 
 def pretty(token):
@@ -198,6 +205,9 @@ def main():
     ap.add_argument("--target", type=float, help="target length in seconds")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
+    for stream in (sys.stdin, sys.stdout, sys.stderr):   # Windows defaults to cp1252
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
 
     raw = sys.stdin.read() if args.input == "-" else open(args.input, encoding="utf-8").read()
     a = analyse(raw, wpm=args.wpm, target=args.target)

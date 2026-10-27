@@ -310,15 +310,37 @@ your name. If a draft needs a number you have not given, it comes back with
 until the fact got checked. If something here contradicts what Instagram is
 doing when you read it, Instagram is right.
 
+## Português (pt-BR)
+
+Every tool also reads Brazilian Portuguese. Set `Language: pt` in your
+`voice.md` and the skills write in Portuguese, while the scripts pick the
+Portuguese vocabulary on their own (or take `--lang pt`):
+
+- `hookscore.py` scores Portuguese hooks with Portuguese numbers ("vinte mil",
+  R$ 18.000), stakes words, weak openers ("oi galera", "nesse vídeo") and the
+  dropped subject ("Perdi R$ 18 mil" is first person).
+- `hooks.pt.json` carries the 26 formulas rewritten for spoken Portuguese, with
+  the same ids, so a mixed log stays comparable.
+- `slop.pt.json` is the Portuguese humanizer lexicon: translated-AI phrasing,
+  coach copy and gerundismo.
+- `caption.py`, `beats.py` and `swipe.py` understand accents, R$, and the
+  Portuguese asks ("salva esse", "comenta PALAVRA", "link na bio").
+
+The Portuguese lexicon has not been measured against a corpus the way the
+English one was. It is the same five heuristics in another vocabulary. Run
+`/ig-audit` on your own posts before you trust its numbers.
+
 ## Files
 
 ```
 skills/ig-reel/hooks.json          26 hook formulas: template, example, on-screen line,
                                    what it is for, how it gets ruined, and a match regex
-skills/ig-reel/hookscore.py        the five-property hook panel
+skills/ig-reel/hooks.pt.json       the same 26 formulas in Brazilian Portuguese
+skills/ig-reel/hookscore.py        the five-property hook panel (en + pt)
 skills/ig-reel/beats.py            script to timed beat sheet
 skills/ig-caption/caption.py       the truncation preview and the caption linter
 skills/ig-human/slop.json          the lexicon: 154 terms, 18 invisible classes, 16 tells
+skills/ig-human/slop.pt.json       the Portuguese lexicon, extends slop.json
 skills/ig-human/humanize.py        the three cleaning passes
 skills/ig-human/detect.py          the five-check panel
 skills/ig-viral/swipe.py           outlier ranking and formula classification

@@ -21,6 +21,9 @@ One tool lives in this folder and it runs:
 python3 swipe.py captured.tsv --out ~/.claude/instagram/swipe.md
 ```
 
+Hooks can be English, Portuguese or a mix. Each one is classified against
+`hooks.json` or `hooks.pt.json` by its own language; `--lang pt` forces it.
+
 ## The one idea that makes this worth doing
 
 **Raw views are not evidence.** An account with two million followers doing

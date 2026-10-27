@@ -23,6 +23,7 @@ Usage
   python3 swipe.py captured.tsv
   python3 swipe.py captured.tsv --out ~/.claude/instagram/swipe.md
   python3 swipe.py captured.tsv --json
+  python3 swipe.py capturados.tsv --lang pt   # hooks.pt.json; auto by default
 """
 
 import argparse
@@ -34,13 +35,16 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 HOOKS = os.path.join(HERE, "..", "ig-reel", "hooks.json")
-WORD_RE = re.compile(r"[A-Za-z0-9$%'’-]+")
+HOOKS_PT = os.path.join(HERE, "..", "ig-reel", "hooks.pt.json")
+WORD_RE = re.compile(r"[\w$%'’-]+")
 
 try:                                              # optional: score the hooks too
     sys.path.insert(0, os.path.join(HERE, "..", "ig-reel"))
     from hookscore import run as score_hook       # noqa: E402
+    from hookscore import guess_lang              # noqa: E402
 except Exception:                                 # ig-viral copied on its own
     score_hook = None
+    guess_lang = lambda text: "en"
 
 
 def load_formulas(path):
@@ -91,16 +95,18 @@ def read_rows(path):
     return rows
 
 
-def analyse(rows, formulas):
+def analyse(rows, formulas, lang="auto"):
+    """`formulas` maps a language to its formula list, so a batch can mix both."""
     used_median = any(r.get("median") for r in rows)
     for r in rows:
+        r["lang"] = guess_lang(r["hook"]) if lang == "auto" else lang
         base = r.get("median") or r.get("followers") or 0
         r["baseline"] = base
         r["outlier"] = round(r["views"] / base, 2) if base else None
-        r["formula_id"], r["formula"] = classify(r["hook"], formulas)
+        r["formula_id"], r["formula"] = classify(r["hook"], formulas.get(r["lang"]))
         r["words"] = len(WORD_RE.findall(r["hook"]))
         if score_hook:
-            _, overall, verdict, _ = score_hook(r["hook"])
+            _, overall, verdict, _ = score_hook(r["hook"], r["lang"])
             r["hook_score"], r["hook_verdict"] = round(overall, 1), verdict
         else:
             r["hook_score"], r["hook_verdict"] = None, None
@@ -174,19 +180,28 @@ def to_markdown(a):
 def main():
     ap = argparse.ArgumentParser(description="Rank collected reels by outlier multiple.")
     ap.add_argument("input", nargs="?", default="-", help="TSV file, or - for stdin")
-    ap.add_argument("--hooks", default=HOOKS, help="path to ig-reel/hooks.json")
+    ap.add_argument("--hooks", help="path to a hooks file (overrides --lang)")
+    ap.add_argument("--lang", choices=["auto", "en", "pt"], default="auto",
+                    help="hook language (default: guess per hook)")
     ap.add_argument("--out", help="also write the swipe file as markdown here")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
+    for stream in (sys.stdin, sys.stdout, sys.stderr):   # Windows defaults to cp1252
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
 
     rows = read_rows(args.input)
     if not rows:
         print("no usable rows. Need a tab-separated file with at least views and hook.",
               file=sys.stderr)
         sys.exit(2)
-    formulas = load_formulas(args.hooks)
-    a = analyse(rows, formulas)
-    if not formulas:
+    if args.hooks:
+        one = load_formulas(args.hooks)
+        formulas = {"en": one, "pt": one}
+    else:
+        formulas = {"en": load_formulas(HOOKS), "pt": load_formulas(HOOKS_PT)}
+    a = analyse(rows, formulas, args.lang)
+    if not any(formulas.values()):
         print("note: hooks.json not found, formulas not named. Pass --hooks.", file=sys.stderr)
     if score_hook is None:
         print("note: hookscore.py not importable, hook scores skipped.", file=sys.stderr)

@@ -18,7 +18,14 @@ eyeball this.
 python3 humanize.py draft.txt --report        # clean it, show what changed
 python3 detect.py draft.txt                    # score it, five checks
 python3 detect.py before.txt after.txt         # prove the delta
+python3 humanize.py rascunho.txt --lang pt     # Portuguese lexicon
 ```
+
+Both pick `slop.json` or `slop.pt.json` from the draft's language unless
+`--lang` says otherwise. The Portuguese lexicon targets translated-AI prose
+("é importante ressaltar", "mergulhar fundo", "jornada") and coach copy
+("próximo nível", "virada de chave"), and it flags gerundismo ("vou estar
+enviando"). It inherits the invisible and typographic lists from `slop.json`.
 
 Both read `slop.json`: 154 stock words and phrases with plain-English
 replacements, 18 invisible character classes, 11 typographic substitutions and

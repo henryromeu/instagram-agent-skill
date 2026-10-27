@@ -22,6 +22,15 @@ python3 hookscore.py --hook "one line"      # score a single one
 python3 beats.py script.txt --target 30     # timed beat sheet before you shoot
 ```
 
+Both scripts read English and Brazilian Portuguese. `hookscore.py` guesses the
+language per hook; pass `--lang pt` to force it.
+
+**Language.** If `voice.md` says `Language: pt`, or the user writes in
+Portuguese, work in Brazilian Portuguese end to end. Read `hooks.pt.json` instead of
+`hooks.json`: same 26 ids, so `log.md` stays comparable, with Portuguese
+templates, examples and on-screen lines. Write the way Brazilians talk on
+camera: "pra", "tá", "a gente", R$ with the number spoken.
+
 ## Before you write
 
 1. Read `~/.claude/instagram/voice.md` if it exists. That is the user's voice

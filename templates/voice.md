@@ -15,6 +15,8 @@ the words out loud. A line you would never say is not a draft, it is a retake.
 
 ## Who I am
 
+- **Language:** (en / pt. With pt, every skill writes in Brazilian Portuguese
+  and the tools use `hooks.pt.json` and `slop.pt.json`)
 - **Name:**
 - **Handle:**
 - **What I do, in one sentence:**

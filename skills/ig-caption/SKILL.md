@@ -17,6 +17,9 @@ python3 caption.py caption.txt
 python3 caption.py caption.txt --keywords "client proposals,agency pricing"
 ```
 
+It reads Portuguese captions too: "salva esse", "comenta PALAVRA", "link na
+bio" and "me chama no direct" count as asks, and accented hashtags parse whole.
+
 It prints the caption the way the feed prints it: the first 125 characters in a
 box, everything else behind the tap. Read that box before you read anything
 else you wrote.

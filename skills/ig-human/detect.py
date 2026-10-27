@@ -19,6 +19,7 @@ Usage
   pbpaste | python3 detect.py -
   python3 detect.py draft.txt --json
   python3 detect.py before.txt after.txt      # compare two drafts
+  python3 detect.py rascunho.txt --lang pt    # auto by default
 """
 
 import argparse
@@ -30,14 +31,22 @@ import sys
 import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LEX = os.path.join(HERE, "slop.json")
+sys.path.insert(0, HERE)
+from humanize import guess_lang, lexicon_path, load_lexicon  # noqa: E402
 
 SENT_RE = re.compile(r"[^.!?\n]+[.!?]*")
-WORD_RE = re.compile(r"[A-Za-z']+")
+WORD_RE = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)?")
 CONTRACTIONS = re.compile(r"\b\w+'(?:s|t|re|ve|ll|d|m)\b", re.IGNORECASE)
 PRONOUNS = re.compile(r"\b(i|me|my|mine|we|us|our|you|your)\b", re.IGNORECASE)
+# Spoken Portuguese has no apostrophes; its contractions are whole words.
+CONTRACTIONS_PT = re.compile(
+    r"\b(?:pra|pro|pras|pros|tá|tô|tão|cê|vc|né|num|numa|dum|duma|tava|tamo"
+    r"|bora|daí|aí|pq|tb|tbm)\b", re.IGNORECASE)
+PRONOUNS_PT = re.compile(
+    r"\b(eu|me|mim|meu|minha|meus|minhas|a gente|nós|nosso|nossa|você|voce|vc"
+    r"|vocês|tu|te|teu|tua|seu|sua)\b", re.IGNORECASE)
 NUMBERS = re.compile(r"\b\d[\d,.]*%?\b|\$\d")
-PROPER = re.compile(r"(?<![.!?]\s)(?<!^)\b[A-Z][a-z]{2,}\b", re.MULTILINE)
+PROPER = re.compile(r"(?<![.!?]\s)(?<!^)\b[A-ZÀ-Ý][a-zà-ÿ]{2,}\b", re.MULTILINE)
 
 
 def clamp(n):
@@ -118,14 +127,15 @@ def check_fingerprint(text):
     return score, detail
 
 
-def check_voice(text, lex):
+def check_voice(text, lex, lang="en"):
     """Contractions, person, and the shapes models default to."""
     w = words(text)
     if len(w) < 25:
         return 50.0, "too short to judge"
     per100 = 100 / len(w)
-    contractions = len(CONTRACTIONS.findall(text)) * per100
-    person = len(PRONOUNS.findall(text)) * per100
+    pt = lang == "pt"
+    contractions = len((CONTRACTIONS_PT if pt else CONTRACTIONS).findall(text)) * per100
+    person = len((PRONOUNS_PT if pt else PRONOUNS).findall(text)) * per100
     tells = 0
     names = []
     for s in lex["structures"]:
@@ -154,13 +164,15 @@ def check_voice(text, lex):
 CHECKS = ["BURSTINESS", "SPECIFICITY", "SLOP DENSITY", "FINGERPRINT", "VOICE"]
 
 
-def run(text, lex):
+def run(text, lex, lang="auto"):
+    if lang == "auto":
+        lang = guess_lang(text)
     results = {}
     results["BURSTINESS"] = check_burstiness(text)
     results["SPECIFICITY"] = check_specificity(text)
     results["SLOP DENSITY"] = check_slop(text, lex)
     results["FINGERPRINT"] = check_fingerprint(text)
-    results["VOICE"] = check_voice(text, lex)
+    results["VOICE"] = check_voice(text, lex, lang)
     scores = [results[c][0] for c in CHECKS]
     # The weakest check drags the verdict: a detector only needs one signal.
     overall = statistics.mean(scores) * 0.6 + min(scores) * 0.4
@@ -195,19 +207,24 @@ def main():
     ap.add_argument("input", nargs="?", default="-", help="file, or - for stdin")
     ap.add_argument("compare", nargs="?", help="second file, to show before/after")
     ap.add_argument("--json", action="store_true")
-    ap.add_argument("--lexicon", default=LEX)
+    ap.add_argument("--lexicon", help="path to a lexicon (overrides --lang)")
+    ap.add_argument("--lang", choices=["auto", "en", "pt"], default="auto",
+                    help="slop.json or slop.pt.json (default: guess from the draft)")
     args = ap.parse_args()
+    for stream in (sys.stdin, sys.stdout, sys.stderr):   # Windows defaults to cp1252
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
 
-    lex = json.load(open(args.lexicon, encoding="utf-8"))
     read = lambda p: sys.stdin.read() if p == "-" else open(p, encoding="utf-8").read()
 
     targets = [(args.input, read(args.input))]
     if args.compare:
         targets.append((args.compare, read(args.compare)))
+    lex = load_lexicon(args.lexicon or lexicon_path(args.lang, targets[0][1]))
 
     payload = []
     for name, text in targets:
-        results, overall, verdict = run(text, lex)
+        results, overall, verdict = run(text, lex, args.lang)
         payload.append({
             "source": name,
             "checks": {k: {"score": round(v[0], 1), "detail": v[1]} for k, v in results.items()},
@@ -220,7 +237,7 @@ def main():
         return
 
     for (name, text), p in zip(targets, payload):
-        results, overall, verdict = run(text, lex)
+        results, overall, verdict = run(text, lex, args.lang)
         render(results, overall, verdict, label=os.path.basename(name) if args.compare else None)
     if args.compare:
         a, b = payload
